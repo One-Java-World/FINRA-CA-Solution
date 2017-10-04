@@ -1,6 +1,7 @@
 
 package com.edom.mesfin.solution.rest;
 
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,6 +49,6 @@ public interface DocumentRestService {
             method = RequestMethod.GET,
             consumes = MediaType.ALL_VALUE,
             produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public ResponseEntity<String> getFileByuuidSysName(@RequestPart("uuid") String uuid, @RequestPart("sysName") String sysName);
+    public ResponseEntity<Resource> getFileByuuidSysName(@RequestPart("uuid") String uuid, @RequestPart("sysName") String sysName);
 
 }
