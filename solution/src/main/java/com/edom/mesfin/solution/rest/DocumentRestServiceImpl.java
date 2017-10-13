@@ -11,11 +11,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 //import javax.annotation.Resource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ByteArrayResource;
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.LoggerFactory;
@@ -24,6 +24,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 
 
@@ -35,8 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service("documentRestService")
 public class DocumentRestServiceImpl implements DocumentRestService{
 
-    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(DocumentRestServiceImpl.class);
-    
+    private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(DocumentRestServiceImpl.class);    
     private final String FILE_DIR = System.getProperty("user.home") + File.separator + "file_dir";
     
     @Autowired
@@ -44,21 +45,24 @@ public class DocumentRestServiceImpl implements DocumentRestService{
     
     @Override
     public ResponseEntity<String> uploadDocument(MultipartFile uploadFile, String documentMetadata) {
-        DocMetadata metaData = null;
         String errMsg;
+        DocMetadata metaData = null;       
         try {
             metaData = new ObjectMapper().readValue(documentMetadata, DocMetadata.class);
         } catch (IOException ex) {
             errMsg = "Issue happened while extracting file meta data. Upload request failed.";
             LOG.debug(errMsg, ex);
             return ResponseEntity.badRequest().body(ex.getMessage());            
-        }
+        }               
         if(uploadFile == null || metaData == null){
             errMsg = "Document or Meta Data can not be null or empity. Upload request failed.";
             LOG.debug(errMsg);
             return ResponseEntity.badRequest().body(errMsg);
-        }
-        else if(!uploadFile.getOriginalFilename().equals(metaData.getFileName())){
+        }else if(StringUtils.isBlank(metaData.getSystemName())){
+            errMsg = "Uploading System Name can not be empty/null!. Upload request failed.";
+            LOG.debug(errMsg);
+            return ResponseEntity.badRequest().body(errMsg);
+        }else if(!uploadFile.getOriginalFilename().equals(metaData.getFileName())){
             errMsg = "Document name should match with the meta data entry!. Upload request failed.";
             LOG.debug(errMsg);
             return ResponseEntity.badRequest().body(errMsg);
@@ -74,17 +78,11 @@ public class DocumentRestServiceImpl implements DocumentRestService{
         doc.setCreatedDate(new Date());
         doc.setUpdatedDate(new Date());
 
-        docServImpl.createOrupdate(doc);
-
-        ////Then Save file to local file system using UUID and file extension for later retrival.                
-        File file;        
-        String ext = FilenameUtils.getExtension(uploadFile.getOriginalFilename());
-        file = new File(FILE_DIR + File.separator + uuid + "." + ext);
         try {                        
-            FileUtils.copyInputStreamToFile(uploadFile.getInputStream(), file);
+            docServImpl.createOrupdateWithFile(doc, uuid, uploadFile, FILE_DIR);
         } catch (IOException ex) {
             errMsg = "Error persisting the file stream to local file.";
-            LOG.debug(errMsg);
+            LOG.debug(errMsg, ex);
             return ResponseEntity.badRequest().body(errMsg);
         }
         
@@ -94,13 +92,17 @@ public class DocumentRestServiceImpl implements DocumentRestService{
     @Override
     public ResponseEntity<Resource> getFileByuuidSysName(String uuid, String sysName) {
         String errMsg;
-        ////Return file. Not requested.
         
-        Document doc = docServImpl.getDocumentByUuid(uuid);
+        Document doc = docServImpl.getDocumentByUuid(uuid);  
         if(doc == null){
             errMsg = "Document could not be found for the given UUID: " + uuid;
             LOG.debug(errMsg);
             return ResponseEntity.notFound().header("ErrorMsg", errMsg).build();
+        }
+        if(StringUtils.isBlank(sysName) || !sysName.equals(doc.getSysName())){
+            errMsg = "External system name should match with our record of the document.";
+            LOG.debug(errMsg);
+            return ResponseEntity.badRequest().header("ErrorMsg", errMsg).build();
         }
         
         String ext = FilenameUtils.getExtension(doc.getFileName());
@@ -112,7 +114,7 @@ public class DocumentRestServiceImpl implements DocumentRestService{
             resource = new ByteArrayResource(Files.readAllBytes(path));
         } catch (IOException ex) {
             errMsg = "Document meta-data was found, but the actual file could not be retrieved from the local file system. UUID: " + uuid;
-            LOG.debug(errMsg);
+            LOG.debug(errMsg, ex);
             return ResponseEntity.notFound().header("ErrorMsg", errMsg).build();
         }
         HttpHeaders headers = new HttpHeaders();
@@ -127,6 +129,29 @@ public class DocumentRestServiceImpl implements DocumentRestService{
                 .contentLength(file.length())
                 .contentType(MediaType.parseMediaType("application/octet-stream"))
                 .body(resource);        
+    }
+
+    @Override
+    public List<Document> getAllMetaData() {
+        return docServImpl.getAllDocMetaData();
+    }
+
+    @Override    
+    public Document getDocumentMetaData(@PathVariable String uuid) {
+        return docServImpl.getDocumentByUuid(uuid);
+    }
+
+    @Override
+    public List<Document> getDocumentMetaDataBySysName(@PathVariable("SystemName") String sysName) {
+        return docServImpl.getMetaDataBySysName(sysName);
+    }
+
+    @Override
+    public String uploadDocMetaData(@RequestBody Document doc) {
+        if(doc != null && StringUtils.isBlank(doc.getUuid()))doc.setUuid(UUID.randomUUID().toString());
+        docServImpl.addMetaData(doc);
+        
+        return doc.getUuid();
     }
 
 }

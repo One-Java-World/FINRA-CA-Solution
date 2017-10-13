@@ -2,6 +2,7 @@
 package com.edom.mesfin.solution.entity;
 
 import java.util.Date;
+import java.util.UUID;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.Id;
@@ -22,6 +23,7 @@ public class Document {
     private String uuid;
     
     private String fileName;
+    
     @Column(name = "EXTERNALSYSTEMNAME")
     private String sysName; //// System/Owner/Client name - whoever posted the file should provide a system name as meta-data as well .
     
@@ -35,7 +37,15 @@ public class Document {
     @Type(type = "yes_no")
     private boolean storedInS3;
 
-    
+    public Document(){}
+    public Document(String fileName, String systemName){
+        super();
+        this.uuid = UUID.randomUUID().toString();
+        this.createdDate = this.updatedDate = new Date();
+        this.storedInS3 = false;
+        this.fileName = fileName;
+        this.sysName = systemName;
+    }
     
     
     public String getUuid() {
